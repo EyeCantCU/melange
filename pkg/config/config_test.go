@@ -2,7 +2,9 @@ package config
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -2048,6 +2050,9 @@ func TestLicensingInfosWithValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	checksum := sha256.Sum256([]byte(licenseContent))
+	checksumSuffix := hex.EncodeToString(checksum[:8])
+
 	tests := []struct {
 		name      string
 		copyright []Copyright
@@ -2085,7 +2090,7 @@ func TestLicensingInfosWithValidation(t *testing.T) {
 				{License: "CustomLicense", LicensePath: "LICENSE.custom"},
 			},
 			expected: map[string]string{
-				"LicenseRef-CustomLicense": licenseContent,
+				"LicenseRef-CustomLicense-" + checksumSuffix: licenseContent,
 			},
 		},
 		{
@@ -2124,7 +2129,7 @@ func TestLicensingInfosWithValidation(t *testing.T) {
 				{License: "PROPRIETARY", LicensePath: "LICENSE.custom"},
 			},
 			expected: map[string]string{
-				"LicenseRef-PROPRIETARY": licenseContent,
+				"LicenseRef-PROPRIETARY-" + checksumSuffix: licenseContent,
 			},
 		},
 	}

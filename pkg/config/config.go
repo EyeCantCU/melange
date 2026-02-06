@@ -460,6 +460,38 @@ func (p Package) LicenseExpression() string {
 	return licenseExpression
 }
 
+// LicenseExpressionWithLicensePathChecksums returns an SPDX license expression
+// formed from the data in the copyright structs found in the conf.
+//
+// For non-SPDX licenses (i.e. LicenseRef-*), if a license-path is provided,
+// this appends a checksum of the referenced license text to the LicenseRef ID
+// to keep it unique and stable.
+func (p Package) LicenseExpressionWithLicensePathChecksums(ctx context.Context, workspaceDir string) (string, error) {
+	licenseExpression := ""
+	if p.Copyright == nil {
+		return licenseExpression, nil
+	}
+
+	for _, cp := range p.Copyright {
+		if licenseExpression != "" {
+			licenseExpression += " AND "
+		}
+
+		id := normalizeLicenseID(cp.License)
+		if cp.LicensePath != "" && strings.HasPrefix(id, "LicenseRef-") {
+			content, err := readLicenseTextFromWorkspace(workspaceDir, cp.LicensePath)
+			if err != nil {
+				return "", err
+			}
+			id = appendLicenseTextChecksum(id, content)
+		}
+
+		licenseExpression += id
+	}
+
+	return licenseExpression, nil
+}
+
 // normalizeLicenseID checks if a license identifier is a valid SPDX license.
 // If valid, it returns the license as-is. If invalid, it returns a LicenseRef-
 // formatted identifier that is SPDX compliant.
@@ -502,6 +534,28 @@ func toLicenseRef(license string) string {
 	return "LicenseRef-" + sanitized
 }
 
+func readLicenseTextFromWorkspace(workspaceDir, licensePath string) ([]byte, error) {
+	// Clean and localize the path
+	cleanPath := filepath.Clean(licensePath)
+	localPath, err := filepath.Localize(cleanPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid license-path %q: %w", licensePath, err)
+	}
+	fullPath := filepath.Join(workspaceDir, localPath)
+
+	content, err := os.ReadFile(fullPath) // #nosec G304 - Reading license file from build workspace
+	if err != nil {
+		return nil, fmt.Errorf("failed to read licensepath %q: %w", licensePath, err)
+	}
+
+	return content, nil
+}
+
+func appendLicenseTextChecksum(licenseID string, licenseText []byte) string {
+	h := sha256.Sum256(licenseText)
+	return licenseID + "-" + hex.EncodeToString(h[:8])
+}
+
 // isValidSPDXLicense checks if a license identifier is a valid SPDX license.
 func isValidSPDXLicense(license string) bool {
 	if license == "" {
@@ -529,17 +583,12 @@ func (p Package) LicensingInfos(ctx context.Context, workspaceDir string) (map[s
 		id := normalizeLicenseID(license)
 
 		if cp.LicensePath != "" {
-			// Clean and localize the path
-			cleanPath := filepath.Clean(cp.LicensePath)
-			localPath, err := filepath.Localize(cleanPath)
+			content, err := readLicenseTextFromWorkspace(workspaceDir, cp.LicensePath)
 			if err != nil {
-				return nil, fmt.Errorf("invalid license-path %q: %w", cp.LicensePath, err)
+				return nil, err
 			}
-			fullPath := filepath.Join(workspaceDir, localPath)
-
-			content, err := os.ReadFile(fullPath) // #nosec G304 - Reading license file from build workspace
-			if err != nil {
-				return nil, fmt.Errorf("failed to read licensepath %q: %w", cp.LicensePath, err)
+			if strings.HasPrefix(id, "LicenseRef-") {
+				id = appendLicenseTextChecksum(id, content)
 			}
 			licenseInfos[id] = string(content)
 		} else if strings.HasPrefix(id, "LicenseRef-") {

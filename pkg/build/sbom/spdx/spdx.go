@@ -112,6 +112,11 @@ func (g *Generator) GenerateSPDX(ctx context.Context, gc *build.GeneratorContext
 	pkg := &gc.Configuration.Package
 	arch := gc.Arch
 
+	licenseExpr, err := gc.Configuration.Package.LicenseExpressionWithLicensePathChecksums(ctx, gc.WorkspaceDir)
+	if err != nil {
+		return nil, fmt.Errorf("computing license expression: %w", err)
+	}
+
 	// Add APK packages to their respective SBOMs
 	for _, sp := range gc.Configuration.Subpackages {
 		spSBOM := sg.Document(sp.Name)
@@ -120,7 +125,7 @@ func (g *Generator) GenerateSPDX(ctx context.Context, gc *build.GeneratorContext
 			Name:            sp.Name,
 			Version:         pkg.FullVersion(),
 			Copyright:       pkg.FullCopyright(),
-			LicenseDeclared: pkg.LicenseExpression(),
+			LicenseDeclared: licenseExpr,
 			Namespace:       gc.Namespace,
 			Arch:            arch,
 			PURL:            pkg.PackageURLForSubpackage(gc.Namespace, arch, sp.Name),
@@ -130,7 +135,7 @@ func (g *Generator) GenerateSPDX(ctx context.Context, gc *build.GeneratorContext
 		// Add upstream source packages from subpackage pipelines
 		for i, p := range sp.Pipeline {
 			uniqueID := strconv.Itoa(i)
-			upstreamPkg, err := p.SBOMPackageForUpstreamSource(pkg.LicenseExpression(), gc.Namespace, uniqueID)
+			upstreamPkg, err := p.SBOMPackageForUpstreamSource(licenseExpr, gc.Namespace, uniqueID)
 			if err != nil {
 				return nil, fmt.Errorf("creating SBOM package for upstream source in subpackage %s: %w", sp.Name, err)
 			}
@@ -149,7 +154,7 @@ func (g *Generator) GenerateSPDX(ctx context.Context, gc *build.GeneratorContext
 		Name:            pkg.Name,
 		Version:         pkg.FullVersion(),
 		Copyright:       pkg.FullCopyright(),
-		LicenseDeclared: pkg.LicenseExpression(),
+		LicenseDeclared: licenseExpr,
 		Namespace:       gc.Namespace,
 		Arch:            arch,
 		PURL:            pkg.PackageURL(gc.Namespace, arch),
@@ -172,7 +177,7 @@ func (g *Generator) GenerateSPDX(ctx context.Context, gc *build.GeneratorContext
 	// and to all subpackage SBOMs (since subpackages are derived from the main source)
 	for i, p := range gc.Configuration.Pipeline {
 		uniqueID := strconv.Itoa(i)
-		upstreamPkg, err := p.SBOMPackageForUpstreamSource(gc.Configuration.Package.LicenseExpression(), gc.Namespace, uniqueID)
+		upstreamPkg, err := p.SBOMPackageForUpstreamSource(licenseExpr, gc.Namespace, uniqueID)
 		if err != nil {
 			return nil, fmt.Errorf("creating SBOM package for upstream source: %w", err)
 		}

@@ -16,6 +16,8 @@ package spdx
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -274,6 +276,10 @@ func TestSBOMGenerationWithNonSPDXLicense(t *testing.T) {
 		t.Fatalf("failed to write license file: %v", err)
 	}
 
+	checksum := sha256.Sum256([]byte(licenseContent))
+	checksumSuffix := hex.EncodeToString(checksum[:8])
+	licenseID := "LicenseRef-PROPRIETARY-" + checksumSuffix
+
 	// Build configuration with non-SPDX license
 	cfg := &config.Configuration{
 		Package: config.Package{
@@ -352,7 +358,7 @@ func TestSBOMGenerationWithNonSPDXLicense(t *testing.T) {
 				Version:          "1.0.0-r0",
 				FilesAnalyzed:    false,
 				LicenseConcluded: "NOASSERTION",
-				LicenseDeclared:  "LicenseRef-PROPRIETARY",
+				LicenseDeclared:  licenseID,
 				DownloadLocation: "NOASSERTION",
 				Originator:       "Organization: Test-Ns",
 				Supplier:         "Organization: Test-Ns",
@@ -368,7 +374,7 @@ func TestSBOMGenerationWithNonSPDXLicense(t *testing.T) {
 		},
 		LicensingInfos: []spdx.LicensingInfo{
 			{
-				LicenseID:     "LicenseRef-PROPRIETARY",
+				LicenseID:     licenseID,
 				ExtractedText: licenseContent,
 			},
 		},
